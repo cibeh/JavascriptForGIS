@@ -1,0 +1,2492 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="initial-scale=1, maximum-scale=1,user-scalable=no">
+  <title> VEE Webviewer </title>
+
+  <link rel="stylesheet" href="https://js.arcgis.com/4.6/esri/css/main.css">
+
+  <style>
+    html,
+    body {
+      height: 100%;
+      width: 100%;
+      padding: 0;
+      margin: 0;
+    }    
+	.loader {
+    position: fixed;
+    left: 0px;
+    top: 0px;
+    width: 100%;
+    height: 100%;
+    z-index: 9999;
+    background: url('http://bestanimations.com/Science/Gears/loadinggears/loading-gears-animation-13.gif') 50% 50% no-repeat rgb(249,249,249);
+    opacity: .8;
+    }
+    .wrapper {
+      bottom: 0;
+      display: flex;
+      flex-direction: column;
+      left: 0;
+      position: absolute;
+      right: 0;
+      top: 0;
+    }
+    header {
+      background: #004d80;
+      color: white;
+      flex: 0 0 50px;
+      font-family: "Segoe UI",Frutiger,"Frutiger Linotype","Dejavu Sans","Helvetica Neue",Arial,sans-serif;
+      position: relative;
+      text-align: center;
+    }
+    header img {
+      height: 50px;
+      margin-top: 10px;
+    }
+    header h1 {
+      font-weight: normal;
+      font-size: 1rem;
+    }
+    @media screen and (min-width: 950px) {
+      header {
+        align-items: center;
+        display: flex;
+        flex: 0 0 90px;
+        justify-content: center;
+      }
+      header img {
+        height: 50px;
+        left: 40px;
+        position: absolute;
+        top: 10px;
+      }
+      header h1 {
+        font-size: 1.4rem;
+      }
+    }
+    .body {
+      flex: 1;
+    }	
+	.alert {
+    padding: 10px;
+    background-color: gray;
+	font-weight: bold;
+	font-size: 15px;
+    color: black;
+    font-family: "Segoe UI",Frutiger,"Frutiger Linotype","Dejavu Sans","Helvetica Neue",Arial,sans-serif;
+	text-align: center;
+     }
+    .closebtn {
+    margin-left: 15px;
+    color: gray;
+	font-family: "Segoe UI",Frutiger,"Frutiger Linotype","Dejavu Sans","Helvetica Neue",Arial,sans-serif;
+	background-color: black;
+    font-weight: bold;
+    float: right;
+    font-size: 15px;
+    line-height: 20px;
+    cursor: pointer;
+    transition: 0.3s;
+    }
+    .closebtn:hover {
+    background-color: red;
+    }   
+    #viewDiv {
+      height: 100%;
+      width: 100%;
+    }
+  </style>
+
+  <script src="https://js.arcgis.com/4.6/"></script>
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.2.4/jquery.min.js"></script>
+  <script> 
+    require([
+      "esri/Map",
+      "esri/views/MapView",
+      "esri/layers/TileLayer",
+	  "esri/layers/MapImageLayer",
+	  "esri/layers/FeatureLayer",
+	  "esri/renderers/smartMapping/creators/color",
+	  "esri/layers/GroupLayer",
+	  "esri/widgets/Legend",
+      "esri/widgets/Home",
+      "esri/widgets/BasemapToggle",
+	  "esri/widgets/ScaleBar",
+      "esri/widgets/Search",
+      "esri/widgets/LayerList",
+      "dojo/domReady!"
+    ],
+      function (
+        Map, MapView, TileLayer, MapImageLayer, FeatureLayer, colorRendererCreator, GroupLayer, Legend, Home, BasemapToggle, ScaleBar,
+        Search, LayerList
+      ) {
+        
+    $(window).load(function() {
+    $(".loader").fadeOut("slow");
+	$(".alert").fadeOut(30000);
+    });	
+	
+        var map = new Map({
+          basemap: "topo"
+        });
+        //Create map view
+        var view = new MapView({
+          container: "viewDiv",
+          map: map,
+          center: [-78.324, 37.722],
+          zoom: 8,
+        });	
+        // Create tiled layer variable for Virginia land cover from VGIN and turn off visibility
+        var landcover = new TileLayer({
+          url: "http://gismaps.vita.virginia.gov/arcgis/rest/services/VA_Base_layers/VA_Land_Cover/MapServer",
+          visible: false,
+		  title: "Virginia Land Cover"
+        });
+        map.add(landcover);		
+		//Create popup templates for overlay variables		
+		var popupTemplate20 = { // autocasts as new PopupTemplate()
+          title: " ",
+          content: "<p> </p>" +
+		    "<p><b>{UpMidLow} River Boundary.</b></p>" +
+            "<p> Area: {SqMiles} sq. mi.</p>" 	
+        };		
+		var popupTemplate21 = { // autocasts as new PopupTemplate()
+          title: " ",
+          content: "<p> </p>" +
+		    "<p><b> HUC 10 Boundaries </b></p>"+
+		    "<p> HUC 10 Name: {HU_10_Name}</p>" +
+		    "<p> Type: {HU_10_Type}</p>" +
+            "<p> Area: {Area_SqKm} sq. km. </p>" +
+            "<p> Area: {Area_Acres} acres</p>"
+        };	
+        var popupTemplate22 = { // autocasts as new PopupTemplate()
+          title: " ",
+          content: "<p> </p>" +
+		    "<p><b> {NAME10} County </b></p>"  
+        }; 		
+		var popupTemplate0 = { // autocasts as new PopupTemplate()
+          title: " ",
+          content: "<p> </p>" +
+		    "<p> <b> {Subsource} </b></p>" +
+		    "<p> County: {CityCounty}</p>" +
+            "<p> Nitrogen Reduction Goal: {NRedGoal}  lbs/yr.</p>"+
+            "<p> Nitrogen Reduction Percentage: {NRedPer} %.</p>" +
+			"<p> Phosphorus Reduction Goal: {PRedGoal} lbs/yr.</p>" +
+			"<p> Phosphorus Reduction Percentage: {PRedPer} %.</p>" +
+			"<p> Sediment Reduction Goal: {SRedGoal} lbs/yr.</p>" +
+            "<p> Sediment Reduction Percentage: {SRedPer} %.</p>"
+        };
+		
+		var popupTemplate18 = { // autocasts as new PopupTemplate()
+          title: " ",
+          content: "<p> </p>" +
+		    "<p>Site Name: {sitename} </p>" +
+			"<p>Easement Holder: {esmthldr} </p>" +
+			"<p>Easement Type: {eholdtype} </p>"
+        };
+		
+		//Create map layer variables and sublayers within each layer
+        
+		
+        var ecological = new MapImageLayer({
+          url : "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer",
+          useMapImage: true,
+		  sublayers: 
+		[
+	      {
+          id: 17,
+		  visible: false,
+	      title: "VIMS Tidal Marsh",
+          
+          },
+		  {
+          id: 16,
+		  visible: false,
+	      title: "VIMS Shoreline",
+          }
+	    ],            
+		  title: "Ecological Layers"
+        });
+        map.add(ecological);
+
+	//Make seperate layers for each field in County Loading and Reduction Rates Layer
+	// 
+	
+	//********************************************************************************************************************************************
+    //********************************************************************************************************************************************
+	//******************************** BEGINNING OF ANIMAL OPERATIONS LAYER CODE *****************************************************************
+    
+	//Animal Operations
+	//1
+    var predgoal = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/0",
+	    visible: false,
+		title: "Phosphorus Reduction Goal",
+	    popupTemplate: popupTemplate0
+        });
+   
+      // visualization based on field and normalization field
+      var colorParams1 = {
+        layer: predgoal,
+        basemap: map.basemap,  // "gray"
+        field: "PRedGoal",
+		title: "Phosphorus Reduction Goal",
+		
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(colorParams1)
+       .then(function(response){
+        predgoal.renderer = response.renderer;
+     });
+    //2 
+    var nredgoal = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/0",
+	    visible: false,
+		title: "Nitrogen Reduction Goal",
+	    popupTemplate: popupTemplate0
+        });
+   
+      // visualization based on field and normalization field
+      var colorParams2 = {
+        layer: nredgoal,
+        basemap: map.basemap,  // "gray"
+        field: "NRedGoal",
+		title: "Nitrogen Reduction Goal",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(colorParams3)
+       .then(function(response){
+        nredgoal.renderer = response.renderer;
+     });
+	 
+	    //3 
+    var sredgoal = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/0",
+	    visible: false,
+		title: "Sediment Reduction Goal",
+	    popupTemplate: popupTemplate0
+        });
+   
+      // visualization based on field and normalization field
+      var colorParams3 = {
+        layer: sredgoal,
+        basemap: map.basemap,  // "gray"
+        field: "SRedGoal",
+		title: "Sediment Reduction Goal",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(colorParams3)
+       .then(function(response){
+        sredgoal.renderer = response.renderer;
+     }); 
+	 
+	    //4 
+    var sredper = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/0",
+	    visible: false,
+		title: "Sediment Reduction Percentage",
+	    popupTemplate: popupTemplate0
+        });  
+      // visualization based on field and normalization field
+      var colorParams4 = {
+        layer: sredper,
+        basemap: map.basemap,  // "gray"
+        field: "SRedPer",
+		title: "Sediment Reduction Percentage",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(colorParams4)
+       .then(function(response){
+        sredper.renderer = response.renderer;
+     }); 
+	   //5
+    var predper = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/0",
+	    visible: false,
+		title: "Phosphorus Reduction Percentage",
+	    popupTemplate: popupTemplate0
+        });  
+      // visualization based on field and normalization field
+    var colorParams5 = {
+        layer: predper,
+        basemap: map.basemap,  // "gray"
+        field: "PRedPer",
+		title: "Phosphorus Reduction Percentage",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(colorParams5)
+       .then(function(response){
+        predper.renderer = response.renderer;
+     }); 
+	   //6
+    var nredper = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/0",
+	    visible: false,
+		title: "Nitrogen Reduction Percentage",
+	    popupTemplate: popupTemplate0
+        });  
+      // visualization based on field and normalization field
+    var colorParams6 = {
+        layer: nredper,
+        basemap: map.basemap,  // "gray"
+        field: "NRedPer",
+		title: "Nitrogen Reduction Percentage",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(colorParams6)
+       .then(function(response){
+        nredper.renderer = response.renderer;
+     });	 
+	
+	var animalops = new GroupLayer({
+        title: "Animal Operations",
+        visible: true,
+        layers: [sredper, sredgoal, predper, predgoal, nredper, nredgoal],
+      });
+	  
+	    //Combined Sewer System
+	    //1
+    var predgoal2 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/1",
+	    visible: false,
+		title: "Phosphorus Reduction Goal",
+	    popupTemplate: popupTemplate0
+        });
+   
+      // visualization based on field and normalization field
+      var color2Params1 = {
+        layer: predgoal2,
+        basemap: map.basemap,  // "gray"
+        field: "PRedGoal",
+		title: "Phosphorus Reduction Goal",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color2Params1)
+       .then(function(response){
+        predgoal2.renderer = response.renderer;
+     });
+      //2 
+    var nredgoal2 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/1",
+	    visible: false,
+		title: "Nitrogen Reduction Goal",
+	    popupTemplate: popupTemplate0
+        });
+   
+      // visualization based on field and normalization field
+      var color2Params2 = {
+        layer: nredgoal2,
+        basemap: map.basemap,  // "gray"
+        field: "NRedGoal",
+		title: "Nitrogen Reduction Goal",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color2Params3)
+       .then(function(response){
+        nredgoal2.renderer = response.renderer;
+     });
+	 
+	    //3 
+    var sredgoal2 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/1",
+	    visible: false,
+		title: "Sediment Reduction Goal",
+	    popupTemplate: popupTemplate0
+        });
+   
+      // visualization based on field and normalization field
+      var color2Params3 = {
+        layer: sredgoal2,
+        basemap: map.basemap,  // "gray"
+        field: "SRedGoal",
+		title: "Sediment Reduction Goal",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color2Params3)
+       .then(function(response){
+        sredgoal2.renderer = response.renderer;
+     }); 
+	 
+	    //4 
+    var sredper2 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/1",
+	    visible: false,
+		title: "Sediment Reduction Percentage",
+	    popupTemplate: popupTemplate0
+        });  
+      // visualization based on field and normalization field
+      var color2Params4 = {
+        layer: sredper2,
+        basemap: map.basemap,  // "gray"
+        field: "SRedPer",
+		title: "Sediment Reduction Percentage",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color2Params4)
+       .then(function(response){
+        sredper2.renderer = response.renderer;
+     }); 
+	   //5
+    var predper2 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/1",
+	    visible: false,
+		title: "Phosphorus Reduction Percentage",
+	    popupTemplate: popupTemplate0
+        });  
+      // visualization based on field and normalization field
+    var color2Params5 = {
+        layer: predper2,
+        basemap: map.basemap,  // "gray"
+        field: "PRedPer",
+		title: "Phosphorus Reduction Percentage",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color2Params5)
+       .then(function(response){
+        predper2.renderer = response.renderer;
+     }); 
+	   //6
+    var nredper2 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/1",
+	    visible: false,
+		title: "Nitrogen Reduction Percentage",
+	    popupTemplate: popupTemplate0
+        });  
+      // visualization based on field and normalization field
+    var color2Params6 = {
+        layer: nredper2,
+        basemap: map.basemap,  // "gray"
+        field: "NRedPer",
+		title: "Nitrogen Reduction Percentage",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color2Params6)
+       .then(function(response){
+        nredper2.renderer = response.renderer;
+     });	 
+	
+	var css = new GroupLayer({
+        title: "Combined Sewer System",
+        visible: true,
+        layers: [sredper2, sredgoal2, predper2, predgoal2, nredper2, nredgoal2],
+      });
+	  
+	     // Construction
+	    //1
+    var predgoal3 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/2",
+	    visible: false,
+		title: "Phosphorus Reduction Goal",
+	    popupTemplate: popupTemplate0
+        });
+   
+      // visualization based on field and normalization field
+      var color3Params1 = {
+        layer: predgoal3,
+        basemap: map.basemap,  // "gray"
+        field: "PRedGoal",
+		title: "Phosphorus Reduction Goal",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color3Params1)
+       .then(function(response){
+        predgoal3.renderer = response.renderer;
+     });
+    //2 
+    var nredgoal3 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/2",
+	    visible: false,
+		title: "Nitrogen Reduction Goal",
+	    popupTemplate: popupTemplate0
+        });
+   
+      // visualization based on field and normalization field
+      var color3Params2 = {
+        layer: nredgoal3,
+        basemap: map.basemap,  // "gray"
+        field: "NRedGoal",
+		title: "Nitrogen Reduction Goal",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color3Params3)
+       .then(function(response){
+        nredgoal3.renderer = response.renderer;
+     });
+	 
+	    //3 
+    var sredgoal3 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/2",
+	    visible: false,
+		title: "Sediment Reduction Goal",
+	    popupTemplate: popupTemplate0
+        });
+   
+      // visualization based on field and normalization field
+      var color3Params3 = {
+        layer: sredgoal3,
+        basemap: map.basemap,  // "gray"
+        field: "SRedGoal",
+		title: "Sediment Reduction Goal",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color3Params3)
+       .then(function(response){
+        sredgoal3.renderer = response.renderer;
+     }); 
+	 
+	    //4 
+    var sredper3 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/2",
+	    visible: false,
+		title: "Sediment Reduction Percentage",
+	    popupTemplate: popupTemplate0
+        });  
+      // visualization based on field and normalization field
+      var color3Params4 = {
+        layer: sredper3,
+        basemap: map.basemap,  // "gray"
+        field: "SRedPer",
+		title: "Sediment Reduction Percentage",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color3Params4)
+       .then(function(response){
+        sredper3.renderer = response.renderer;
+     }); 
+	   //5
+    var predper3 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/2",
+	    visible: false,
+		title: "Phosphorus Reduction Percentage",
+	    popupTemplate: popupTemplate0
+        });  
+      // visualization based on field and normalization field
+    var color3Params5 = {
+        layer: predper3,
+        basemap: map.basemap,  // "gray"
+        field: "PRedPer",
+		title: "Phosphorus Reduction Percentage",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color3Params5)
+       .then(function(response){
+        predper3.renderer = response.renderer;
+     }); 
+	   //6
+    var nredper3 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/2",
+	    visible: false,
+		title: "Nitrogen Reduction Percentage",
+	    popupTemplate: popupTemplate0
+        });  
+      // visualization based on field and normalization field
+    var color3Params6 = {
+        layer: nredper3,
+        basemap: map.basemap,  // "gray"
+        field: "NRedPer",
+		title: "Nitrogen Reduction Percentage",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color3Params6)
+       .then(function(response){
+        nredper3.renderer = response.renderer;
+     });	 
+	
+	var cons = new GroupLayer({
+        title: "Construction",
+        visible: true,
+        layers: [sredper3, sredgoal3, predper3, predgoal3, nredper3, nredgoal3],
+      });  
+	
+     // Crop	
+    //1
+    var predgoal4 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/3",
+	    visible: false,
+		title: "Phosphorus Reduction Goal",
+	    popupTemplate: popupTemplate0
+        });
+   
+      // visualization based on field and normalization field
+      var color4Params1 = {
+        layer: predgoal4,
+        basemap: map.basemap,  // "gray"
+        field: "PRedGoal",
+		title: "Phosphorus Reduction Goal",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color4Params1)
+       .then(function(response){
+        predgoal4.renderer = response.renderer;
+     });
+    //2 
+    var nredgoal4 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/3",
+	    visible: false,
+		title: "Nitrogen Reduction Goal",
+	    popupTemplate: popupTemplate0
+        });
+   
+      // visualization based on field and normalization field
+      var color4Params2 = {
+        layer: nredgoal4,
+        basemap: map.basemap,  // "gray"
+        field: "NRedGoal",
+		title: "Nitrogen Reduction Goal",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color4Params3)
+       .then(function(response){
+        nredgoal4.renderer = response.renderer;
+     });
+	 
+	    //3 
+    var sredgoal4 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/3",
+	    visible: false,
+		title: "Sediment Reduction Goal",
+	    popupTemplate: popupTemplate0
+        });
+   
+      // visualization based on field and normalization field
+      var color4Params3 = {
+        layer: sredgoal4,
+        basemap: map.basemap,  // "gray"
+        field: "SRedGoal",
+		title: "Sediment Reduction Goal",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color4Params3)
+       .then(function(response){
+        sredgoal4.renderer = response.renderer;
+     }); 
+	 
+	    //4 
+    var sredper4 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/3",
+	    visible: false,
+		title: "Sediment Reduction Percentage",
+	    popupTemplate: popupTemplate0
+        });  
+      // visualization based on field and normalization field
+      var color4Params4 = {
+        layer: sredper4,
+        basemap: map.basemap,  // "gray"
+        field: "SRedPer",
+		title: "Sediment Reduction Percentage",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color4Params4)
+       .then(function(response){
+        sredper4.renderer = response.renderer;
+     }); 
+	   //5
+    var predper4 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/3",
+	    visible: false,
+		title: "Phosphorus Reduction Percentage",
+	    popupTemplate: popupTemplate0
+        });  
+      // visualization based on field and normalization field
+    var color4Params5 = {
+        layer: predper4,
+        basemap: map.basemap,  // "gray"
+        field: "PRedPer",
+		title: "Phosphorus Reduction Percentage",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color4Params5)
+       .then(function(response){
+        predper4.renderer = response.renderer;
+     }); 
+	   //6
+    var nredper4 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/3",
+	    visible: false,
+		title: "Nitrogen Reduction Percentage",
+	    popupTemplate: popupTemplate0
+        });  
+      // visualization based on field and normalization field
+    var color4Params6 = {
+        layer: nredper4,
+        basemap: map.basemap,  // "gray"
+        field: "NRedPer",
+		title: "Nitrogen Reduction Percentage",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color4Params6)
+       .then(function(response){
+        nredper4.renderer = response.renderer;
+     });	 
+	
+	var crop = new GroupLayer({
+        title: "Crop",
+        visible: true,
+        layers: [sredper4, sredgoal4, predper4, predgoal4, nredper4, nredgoal4],
+      });
+
+	 // Forest
+    //1
+    var predgoal5 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/4",
+	    visible: false,
+		title: "Phosphorus Reduction Goal",
+	    popupTemplate: popupTemplate0
+        });
+   
+      // visualization based on field and normalization field
+      var color5Params1 = {
+        layer: predgoal5,
+        basemap: map.basemap,  // "gray"
+        field: "PRedGoal",
+		title: "Phosphorus Reduction Goal",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color5Params1)
+       .then(function(response){
+        predgoal5.renderer = response.renderer;
+     });
+    //2 
+    var nredgoal5 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/4",
+	    visible: false,
+		title: "Nitrogen Reduction Goal",
+	    popupTemplate: popupTemplate0
+        });
+   
+      // visualization based on field and normalization field
+      var color5Params2 = {
+        layer: nredgoal5,
+        basemap: map.basemap,  // "gray"
+        field: "NRedGoal",
+		title: "Nitrogen Reduction Goal",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color5Params3)
+       .then(function(response){
+        nredgoal5.renderer = response.renderer;
+     });
+	 
+	    //3 
+    var sredgoal5 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/4",
+	    visible: false,
+		title: "Sediment Reduction Goal",
+	    popupTemplate: popupTemplate0
+        });
+   
+      // visualization based on field and normalization field
+      var color5Params3 = {
+        layer: sredgoal5,
+        basemap: map.basemap,  // "gray"
+        field: "SRedGoal",
+		title: "Sediment Reduction Goal",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color5Params3)
+       .then(function(response){
+        sredgoal5.renderer = response.renderer;
+     }); 
+	 
+	    //4 
+    var sredper5 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/4",
+	    visible: false,
+		title: "Sediment Reduction Percentage",
+	    popupTemplate: popupTemplate0
+        });  
+      // visualization based on field and normalization field
+      var color5Params4 = {
+        layer: sredper5,
+        basemap: map.basemap,  // "gray"
+        field: "SRedPer",
+		title: "Sediment Reduction Percentage",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color5Params4)
+       .then(function(response){
+        sredper5.renderer = response.renderer;
+     }); 
+	   //5
+    var predper5 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/4",
+	    visible: false,
+		title: "Phosphorus Reduction Percentage",
+	    popupTemplate: popupTemplate0
+        });  
+      // visualization based on field and normalization field
+    var color5Params5 = {
+        layer: predper5,
+        basemap: map.basemap,  // "gray"
+        field: "PRedPer",
+		title: "Phosphorus Reduction Percentage",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color5Params5)
+       .then(function(response){
+        predper5.renderer = response.renderer;
+     }); 
+	   //6
+    var nredper5 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/4",
+	    visible: false,
+		title: "Nitrogen Reduction Percentage",
+	    popupTemplate: popupTemplate0
+        });  
+      // visualization based on field and normalization field
+    var color5Params6 = {
+        layer: nredper5,
+        basemap: map.basemap,  // "gray"
+        field: "NRedPer",
+		title: "Nitrogen Reduction Percentage",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color5Params6)
+       .then(function(response){
+        nredper5.renderer = response.renderer;
+     });	 
+	
+	var forest = new GroupLayer({
+        title: "Forest",
+        visible: true,
+        layers: [sredper5, sredgoal5, predper5, predgoal5, nredper5, nredgoal5],
+      });
+	
+	//Hay
+	//1
+    var predgoal6 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/5",
+	    visible: false,
+		title: "Phosphorus Reduction Goal",
+	    popupTemplate: popupTemplate0
+        });
+   
+      // visualization based on field and normalization field
+      var color6Params1 = {
+        layer: predgoal6,
+        basemap: map.basemap,  // "gray"
+        field: "PRedGoal",
+		title: "Phosphorus Reduction Goal",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color6Params1)
+       .then(function(response){
+        predgoal6.renderer = response.renderer;
+     });
+    //2 
+    var nredgoal6 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/5",
+	    visible: false,
+		title: "Nitrogen Reduction Goal",
+	    popupTemplate: popupTemplate0
+        });
+   
+      // visualization based on field and normalization field
+      var color6Params2 = {
+        layer: nredgoal6,
+        basemap: map.basemap,  // "gray"
+        field: "NRedGoal",
+		title: "Nitrogen Reduction Goal",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color6Params3)
+       .then(function(response){
+        nredgoal6.renderer = response.renderer;
+     });
+	 
+	    //3 
+    var sredgoal6 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/5",
+	    visible: false,
+		title: "Sediment Reduction Goal",
+	    popupTemplate: popupTemplate0
+        });
+   
+      // visualization based on field and normalization field
+      var color6Params3 = {
+        layer: sredgoal6,
+        basemap: map.basemap,  // "gray"
+        field: "SRedGoal",
+		title: "Sediment Reduction Goal",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color6Params3)
+       .then(function(response){
+        sredgoal6.renderer = response.renderer;
+     }); 
+	 
+	    //4
+    var sredper6 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/5",
+	    visible: false,
+		title: "Sediment Reduction Percentage",
+	    popupTemplate: popupTemplate0
+        });  
+      // visualization based on field and normalization field
+      var color6Params5 = {
+        layer: sredper6,
+        basemap: map.basemap,  // "gray"
+        field: "SRedPer",
+		title: "Sediment Reduction Percentage",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color6Params5)
+       .then(function(response){
+        sredper6.renderer = response.renderer;
+     }); 
+	   //5
+    var predper6 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/5",
+	    visible: false,
+		title: "Phosphorus Reduction Percentage",
+	    popupTemplate: popupTemplate0
+        });  
+      // visualization based on field and normalization field
+    var color6Params6 = {
+        layer: predper6,
+        basemap: map.basemap,  // "gray"
+        field: "PRedPer",
+		title: "Phosphorus Reduction Percentage",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color6Params6)
+       .then(function(response){
+        predper6.renderer = response.renderer;
+     }); 
+	   //6
+    var nredper6 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/5",
+	    visible: false,
+		title: "Nitrogen Reduction Percentage",
+	    popupTemplate: popupTemplate0
+        });  
+      // visualization based on field and normalization field
+    var color6Params6 = {
+        layer: nredper6,
+        basemap: map.basemap,  // "gray"
+        field: "NRedPer",
+		title: "Nitrogen Reduction Percentage",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color6Params6)
+       .then(function(response){
+        nredper6.renderer = response.renderer;
+     });	 
+	
+	var hay = new GroupLayer({
+        title: "Hay",
+        visible: true,
+        layers: [sredper6, sredgoal6, predper6, predgoal6, nredper6, nredgoal6],
+      });
+	
+	//Nurseries
+	//1
+    var predgoal7 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/6",
+	    visible: false,
+		title: "Phosphorus Reduction Goal",
+	    popupTemplate: popupTemplate0
+        });
+   
+      // visualization based on field and normalization field
+      var color7Params1 = {
+        layer: predgoal7,
+        basemap: map.basemap,  // "gray"
+        field: "PRedGoal",
+		title: "Phosphorus Reduction Goal",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color7Params1)
+       .then(function(response){
+        predgoal7.renderer = response.renderer;
+     });
+    //2 
+    var nredgoal7 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/6",
+	    visible: false,
+		title: "Nitrogen Reduction Goal",
+	    popupTemplate: popupTemplate0
+        });
+   
+      // visualization based on field and normalization field
+      var color7Params2 = {
+        layer: nredgoal7,
+        basemap: map.basemap,  // "gray"
+        field: "NRedGoal",
+		title: "Nitrogen Reduction Goal",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color7Params3)
+       .then(function(response){
+        nredgoal7.renderer = response.renderer;
+     });
+	 
+	    //3 
+    var sredgoal7 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/6",
+	    visible: false,
+		title: "Sediment Reduction Goal",
+	    popupTemplate: popupTemplate0
+        });
+   
+      // visualization based on field and normalization field
+      var color7Params3 = {
+        layer: sredgoal7,
+        basemap: map.basemap,  // "gray"
+        field: "SRedGoal",
+		title: "Sediment Reduction Goal",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color7Params3)
+       .then(function(response){
+        sredgoal7.renderer = response.renderer;
+     }); 
+	 
+	    //4
+    var sredper7 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/6",
+	    visible: false,
+		title: "Sediment Reduction Percentage",
+	    popupTemplate: popupTemplate0
+        });  
+      // visualization based on field and normalization field
+      var color7Params5 = {
+        layer: sredper7,
+        basemap: map.basemap,  // "gray"
+        field: "SRedPer",
+		title: "Sediment Reduction Percentage",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color7Params5)
+       .then(function(response){
+        sredper7.renderer = response.renderer;
+     }); 
+	   //5
+    var predper7 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/6",
+	    visible: false,
+		title: "Phosphorus Reduction Percentage",
+	    popupTemplate: popupTemplate0
+        });  
+      // visualization based on field and normalization field
+    var color7Params6 = {
+        layer: predper7,
+        basemap: map.basemap,  // "gray"
+        field: "PRedPer",
+		title: "Phosphorus Reduction Percentage",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color7Params6)
+       .then(function(response){
+        predper7.renderer = response.renderer;
+     }); 
+	   //6
+    var nredper7 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/6",
+	    visible: false,
+		title: "Nitrogen Reduction Percentage",
+	    popupTemplate: popupTemplate0
+        });  
+      // visualization based on field and normalization field
+    var color7Params6 = {
+        layer: nredper7,
+        basemap: map.basemap,  // "gray"
+        field: "NRedPer",
+		title: "Nitrogen Reduction Percentage",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color7Params6)
+       .then(function(response){
+        nredper7.renderer = response.renderer;
+     });	 
+	
+	var nurseries = new GroupLayer({
+        title: "Nurseries",
+        visible: true,
+        layers: [sredper7, sredgoal7, predper7, predgoal7, nredper7, nredgoal7],
+      });
+	  
+	//Pasture
+	//1
+    var predgoal8 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/7",
+	    visible: false,
+		title: "Phosphorus Reduction Goal",
+	    popupTemplate: popupTemplate0
+        });
+   
+      // visualization based on field and normalization field
+      var color8Params1 = {
+        layer: predgoal8,
+        basemap: map.basemap,  // "gray"
+        field: "PRedGoal",
+		title: "Phosphorus Reduction Goal",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color8Params1)
+       .then(function(response){
+        predgoal8.renderer = response.renderer;
+     });
+    //2 
+    var nredgoal8 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/7",
+	    visible: false,
+		title: "Nitrogen Reduction Goal",
+	    popupTemplate: popupTemplate0
+        });
+   
+      // visualization based on field and normalization field
+      var color8Params2 = {
+        layer: nredgoal8,
+        basemap: map.basemap,  // "gray"
+        field: "NRedGoal",
+		title: "Nitrogen Reduction Goal",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color8Params3)
+       .then(function(response){
+        nredgoal8.renderer = response.renderer;
+     });
+	 
+	    //3 
+    var sredgoal8 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/7",
+	    visible: false,
+		title: "Sediment Reduction Goal",
+	    popupTemplate: popupTemplate0
+        });
+   
+      // visualization based on field and normalization field
+      var color8Params3 = {
+        layer: sredgoal8,
+        basemap: map.basemap,  // "gray"
+        field: "SRedGoal",
+		title: "Sediment Reduction Goal",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color8Params3)
+       .then(function(response){
+        sredgoal8.renderer = response.renderer;
+     }); 
+	 
+	    //4
+    var sredper8 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/7",
+	    visible: false,
+		title: "Sediment Reduction Percentage",
+	    popupTemplate: popupTemplate0
+        });  
+      // visualization based on field and normalization field
+      var color8Params5 = {
+        layer: sredper8,
+        basemap: map.basemap,  // "gray"
+        field: "SRedPer",
+		title: "Sediment Reduction Percentage",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color8Params5)
+       .then(function(response){
+        sredper8.renderer = response.renderer;
+     }); 
+	   //5
+    var predper8 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/7",
+	    visible: false,
+		title: "Phosphorus Reduction Percentage",
+	    popupTemplate: popupTemplate0
+        });  
+      // visualization based on field and normalization field
+    var color8Params6 = {
+        layer: predper8,
+        basemap: map.basemap,  // "gray"
+        field: "PRedPer",
+		title: "Phosphorus Reduction Percentage",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color8Params6)
+       .then(function(response){
+        predper8.renderer = response.renderer;
+     }); 
+	   //6
+    var nredper8 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/7",
+	    visible: false,
+		title: "Nitrogen Reduction Percentage",
+	    popupTemplate: popupTemplate0
+        });  
+      // visualization based on field and normalization field
+    var color8Params6 = {
+        layer: nredper8,
+        basemap: map.basemap,  // "gray"
+        field: "NRedPer",
+		title: "Nitrogen Reduction Percentage",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color8Params6)
+       .then(function(response){
+        nredper8.renderer = response.renderer;
+     });	 
+	
+	var pasture = new GroupLayer({
+        title: "Pasture",
+        visible: true,
+        layers: [sredper8, sredgoal8, predper8, predgoal8, nredper8, nredgoal8],
+      });
+	  
+	//Regulated Animal Operations
+	//1
+    var predgoal9 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/8",
+	    visible: false,
+		title: "Phosphorus Reduction Goal",
+	    popupTemplate: popupTemplate0
+        });
+   
+      // visualization based on field and normalization field
+      var color9Params1 = {
+        layer: predgoal9,
+        basemap: map.basemap,  // "gray"
+        field: "PRedGoal",
+		title: "Phosphorus Reduction Goal",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color9Params1)
+       .then(function(response){
+        predgoal9.renderer = response.renderer;
+     });
+    //2 
+    var nredgoal9 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/8",
+	    visible: false,
+		title: "Nitrogen Reduction Goal",
+	    popupTemplate: popupTemplate0
+        });
+   
+      // visualization based on field and normalization field
+      var color9Params2 = {
+        layer: nredgoal9,
+        basemap: map.basemap,  // "gray"
+        field: "NRedGoal",
+		title: "Nitrogen Reduction Goal",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color9Params3)
+       .then(function(response){
+        nredgoal9.renderer = response.renderer;
+     });
+	 
+	    //3 
+    var sredgoal9 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/8",
+	    visible: false,
+		title: "Sediment Reduction Goal",
+	    popupTemplate: popupTemplate0
+        });
+   
+      // visualization based on field and normalization field
+      var color9Params3 = {
+        layer: sredgoal9,
+        basemap: map.basemap,  // "gray"
+        field: "SRedGoal",
+		title: "Sediment Reduction Goal",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color9Params3)
+       .then(function(response){
+        sredgoal9.renderer = response.renderer;
+     }); 
+	 
+	    //4
+    var sredper9 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/8",
+	    visible: false,
+		title: "Sediment Reduction Percentage",
+	    popupTemplate: popupTemplate0
+        });  
+      // visualization based on field and normalization field
+      var color9Params5 = {
+        layer: sredper9,
+        basemap: map.basemap,  // "gray"
+        field: "SRedPer",
+		title: "Sediment Reduction Percentage",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color9Params5)
+       .then(function(response){
+        sredper9.renderer = response.renderer;
+     }); 
+	   //5
+    var predper9 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/8",
+	    visible: false,
+		title: "Phosphorus Reduction Percentage",
+	    popupTemplate: popupTemplate0
+        });  
+      // visualization based on field and normalization field
+    var color9Params6 = {
+        layer: predper9,
+        basemap: map.basemap,  // "gray"
+        field: "PRedPer",
+		title: "Phosphorus Reduction Percentage",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color9Params6)
+       .then(function(response){
+        predper9.renderer = response.renderer;
+     }); 
+	   //6
+    var nredper9 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/8",
+	    visible: false,
+		title: "Nitrogen Reduction Percentage",
+	    popupTemplate: popupTemplate0
+        });  
+      // visualization based on field and normalization field
+    var color9Params6 = {
+        layer: nredper9,
+        basemap: map.basemap,  // "gray"
+        field: "NRedPer",
+		title: "Nitrogen Reduction Percentage",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color9Params6)
+       .then(function(response){
+        nredper9.renderer = response.renderer;
+     });	 
+	
+	var rao = new GroupLayer({
+        title: "Regulated Animal Operations",
+        visible: true,
+        layers: [sredper9, sredgoal9, predper9, predgoal9, nredper9, nredgoal9],
+      });
+	
+	//Regulated Urban Impervious
+	//1
+    var predgoal10 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/9",
+	    visible: false,
+		title: "Phosphorus Reduction Goal",
+	    popupTemplate: popupTemplate0
+        });
+   
+      // visualization based on field and normalization field
+      var color10Params1 = {
+        layer: predgoal10,
+        basemap: map.basemap,  // "gray"
+        field: "PRedGoal",
+		title: "Phosphorus Reduction Goal",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color10Params1)
+       .then(function(response){
+        predgoal10.renderer = response.renderer;
+     });
+    //2 
+    var nredgoal10 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/9",
+	    visible: false,
+		title: "Nitrogen Reduction Goal",
+	    popupTemplate: popupTemplate0
+        });
+   
+      // visualization based on field and normalization field
+      var color10Params2 = {
+        layer: nredgoal10,
+        basemap: map.basemap,  // "gray"
+        field: "NRedGoal",
+		title: "Nitrogen Reduction Goal",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color10Params3)
+       .then(function(response){
+        nredgoal10.renderer = response.renderer;
+     });
+	 
+	    //3 
+    var sredgoal10 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/9",
+	    visible: false,
+		title: "Sediment Reduction Goal",
+	    popupTemplate: popupTemplate0
+        });
+   
+      // visualization based on field and normalization field
+      var color10Params3 = {
+        layer: sredgoal10,
+        basemap: map.basemap,  // "gray"
+        field: "SRedGoal",
+		title: "Sediment Reduction Goal",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color10Params3)
+       .then(function(response){
+        sredgoal10.renderer = response.renderer;
+     }); 
+	 
+	    //4
+    var sredper10 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/9",
+	    visible: false,
+		title: "Sediment Reduction Percentage",
+	    popupTemplate: popupTemplate0
+        });  
+      // visualization based on field and normalization field
+      var color10Params5 = {
+        layer: sredper10,
+        basemap: map.basemap,  // "gray"
+        field: "SRedPer",
+		title: "Sediment Reduction Percentage",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color10Params5)
+       .then(function(response){
+        sredper10.renderer = response.renderer;
+     }); 
+	   //5
+    var predper10 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/9",
+	    visible: false,
+		title: "Phosphorus Reduction Percentage",
+	    popupTemplate: popupTemplate0
+        });  
+      // visualization based on field and normalization field
+    var color10Params6 = {
+        layer: predper10,
+        basemap: map.basemap,  // "gray"
+        field: "PRedPer",
+		title: "Phosphorus Reduction Percentage",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color10Params6)
+       .then(function(response){
+        predper10.renderer = response.renderer;
+     }); 
+	   //6
+    var nredper10 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/9",
+	    visible: false,
+		title: "Nitrogen Reduction Percentage",
+	    popupTemplate: popupTemplate0
+        });  
+      // visualization based on field and normalization field
+    var color10Params6 = {
+        layer: nredper10,
+        basemap: map.basemap,  // "gray"
+        field: "NRedPer",
+		title: "Nitrogen Reduction Percentage",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color10Params6)
+       .then(function(response){
+        nredper10.renderer = response.renderer;
+     });	 
+	
+	var rui = new GroupLayer({
+        title: "Regulated Urban Impervious",
+        visible: true,
+        layers: [sredper10, sredgoal10, predper10, predgoal10, nredper10, nredgoal10],
+      });
+	  
+	//Regulated Urban Pervious
+	//1
+    var predgoal11 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/10",
+	    visible: false,
+		title: "Phosphorus Reduction Goal",
+	    popupTemplate: popupTemplate0
+        });
+   
+      // visualization based on field and normalization field
+      var color11Params1 = {
+        layer: predgoal11,
+        basemap: map.basemap,  // "gray"
+        field: "PRedGoal",
+		title: "Phosphorus Reduction Goal",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color11Params1)
+       .then(function(response){
+        predgoal11.renderer = response.renderer;
+     });
+    //2 
+    var nredgoal11 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/10",
+	    visible: false,
+		title: "Nitrogen Reduction Goal",
+	    popupTemplate: popupTemplate0
+        });
+   
+      // visualization based on field and normalization field
+      var color11Params2 = {
+        layer: nredgoal11,
+        basemap: map.basemap,  // "gray"
+        field: "NRedGoal",
+		title: "Nitrogen Reduction Goal",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color11Params3)
+       .then(function(response){
+        nredgoal11.renderer = response.renderer;
+     });
+	 
+	    //3 
+    var sredgoal11 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/10",
+	    visible: false,
+		title: "Sediment Reduction Goal",
+	    popupTemplate: popupTemplate0
+        });
+   
+      // visualization based on field and normalization field
+      var color11Params3 = {
+        layer: sredgoal11,
+        basemap: map.basemap,  // "gray"
+        field: "SRedGoal",
+		title: "Sediment Reduction Goal",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color11Params3)
+       .then(function(response){
+        sredgoal11.renderer = response.renderer;
+     }); 
+	 
+	    //4
+    var sredper11 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/10",
+	    visible: false,
+		title: "Sediment Reduction Percentage",
+	    popupTemplate: popupTemplate0
+        });  
+      // visualization based on field and normalization field
+      var color11Params5 = {
+        layer: sredper11,
+        basemap: map.basemap,  // "gray"
+        field: "SRedPer",
+		title: "Sediment Reduction Percentage",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color11Params5)
+       .then(function(response){
+        sredper11.renderer = response.renderer;
+     }); 
+	   //5
+    var predper11 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/10",
+	    visible: false,
+		title: "Phosphorus Reduction Percentage",
+	    popupTemplate: popupTemplate0
+        });  
+      // visualization based on field and normalization field
+    var color11Params6 = {
+        layer: predper11,
+        basemap: map.basemap,  // "gray"
+        field: "PRedPer",
+		title: "Phosphorus Reduction Percentage",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color11Params6)
+       .then(function(response){
+        predper11.renderer = response.renderer;
+     }); 
+	   //6
+    var nredper11 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/10",
+	    visible: false,
+		title: "Nitrogen Reduction Percentage",
+	    popupTemplate: popupTemplate0
+        });  
+      // visualization based on field and normalization field
+    var color11Params6 = {
+        layer: nredper11,
+        basemap: map.basemap,  // "gray"
+        field: "NRedPer",
+		title: "Nitrogen Reduction Percentage",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color11Params6)
+       .then(function(response){
+        nredper11.renderer = response.renderer;
+     });	 
+	
+	var rup = new GroupLayer({
+        title: "Regulated Urban Pervious",
+        visible: true,
+        layers: [sredper11, sredgoal11, predper11, predgoal11, nredper11, nredgoal11],
+      });
+	  
+	//Septic
+	//1
+    var predgoal12 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/11",
+	    visible: false,
+		title: "Phosphorus Reduction Goal",
+	    popupTemplate: popupTemplate0
+        });
+   
+      // visualization based on field and normalization field
+      var color12Params1 = {
+        layer: predgoal12,
+        basemap: map.basemap,  // "gray"
+        field: "PRedGoal",
+		title: "Phosphorus Reduction Goal",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color12Params1)
+       .then(function(response){
+        predgoal12.renderer = response.renderer;
+     });
+    //2 
+    var nredgoal12 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/11",
+	    visible: false,
+		title: "Nitrogen Reduction Goal",
+	    popupTemplate: popupTemplate0
+        });
+   
+      // visualization based on field and normalization field
+      var color12Params2 = {
+        layer: nredgoal12,
+        basemap: map.basemap,  // "gray"
+        field: "NRedGoal",
+		title: "Nitrogen Reduction Goal",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color12Params3)
+       .then(function(response){
+        nredgoal12.renderer = response.renderer;
+     });
+	 
+	    //3 
+    var sredgoal12 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/11",
+	    visible: false,
+		title: "Sediment Reduction Goal",
+	    popupTemplate: popupTemplate0
+        });
+   
+      // visualization based on field and normalization field
+      var color12Params3 = {
+        layer: sredgoal12,
+        basemap: map.basemap,  // "gray"
+        field: "SRedGoal",
+		title: "Sediment Reduction Goal",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color12Params3)
+       .then(function(response){
+        sredgoal12.renderer = response.renderer;
+     }); 
+	 
+	    //4
+    var sredper12 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/11",
+	    visible: false,
+		title: "Sediment Reduction Percentage",
+	    popupTemplate: popupTemplate0
+        });  
+      // visualization based on field and normalization field
+      var color12Params5 = {
+        layer: sredper12,
+        basemap: map.basemap,  // "gray"
+        field: "SRedPer",
+		title: "Sediment Reduction Percentage",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color12Params5)
+       .then(function(response){
+        sredper12.renderer = response.renderer;
+     }); 
+	   //5
+    var predper12 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/11",
+	    visible: false,
+		title: "Phosphorus Reduction Percentage",
+	    popupTemplate: popupTemplate0
+        });  
+      // visualization based on field and normalization field
+    var color12Params6 = {
+        layer: predper12,
+        basemap: map.basemap,  // "gray"
+        field: "PRedPer",
+		title: "Phosphorus Reduction Percentage",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color12Params6)
+       .then(function(response){
+        predper12.renderer = response.renderer;
+     }); 
+	   //6
+    var nredper12 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/11",
+	    visible: false,
+		title: "Nitrogen Reduction Percentage",
+	    popupTemplate: popupTemplate0
+        });  
+      // visualization based on field and normalization field
+    var color12Params6 = {
+        layer: nredper12,
+        basemap: map.basemap,  // "gray"
+        field: "NRedPer",
+		title: "Nitrogen Reduction Percentage",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color12Params6)
+       .then(function(response){
+        nredper12.renderer = response.renderer;
+     });	 
+	
+	var septic = new GroupLayer({
+        title: "Septic",
+        visible: true,
+        layers: [sredper12, sredgoal12, predper12, predgoal12, nredper12, nredgoal12],
+      });
+	  
+	//Surface Mine
+	//1
+    var predgoal13 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/12",
+	    visible: false,
+		title: "Phosphorus Reduction Goal",
+	    popupTemplate: popupTemplate0
+        });
+   
+      // visualization based on field and normalization field
+      var color13Params1 = {
+        layer: predgoal13,
+        basemap: map.basemap,  // "gray"
+        field: "PRedGoal",
+		title: "Phosphorus Reduction Goal",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color13Params1)
+       .then(function(response){
+        predgoal13.renderer = response.renderer;
+     });
+    //2 
+    var nredgoal13 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/12",
+	    visible: false,
+		title: "Nitrogen Reduction Goal",
+	    popupTemplate: popupTemplate0
+        });
+   
+      // visualization based on field and normalization field
+      var color13Params2 = {
+        layer: nredgoal13,
+        basemap: map.basemap,  // "gray"
+        field: "NRedGoal",
+		title: "Nitrogen Reduction Goal",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color13Params3)
+       .then(function(response){
+        nredgoal13.renderer = response.renderer;
+     });
+	 
+	    //3 
+    var sredgoal13 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/12",
+	    visible: false,
+		title: "Sediment Reduction Goal",
+	    popupTemplate: popupTemplate0
+        });
+   
+      // visualization based on field and normalization field
+      var color13Params3 = {
+        layer: sredgoal13,
+        basemap: map.basemap,  // "gray"
+        field: "SRedGoal",
+		title: "Sediment Reduction Goal",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color13Params3)
+       .then(function(response){
+        sredgoal13.renderer = response.renderer;
+     }); 
+	 
+	    //4
+    var sredper13 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/12",
+	    visible: false,
+		title: "Sediment Reduction Percentage",
+	    popupTemplate: popupTemplate0
+        });  
+      // visualization based on field and normalization field
+      var color13Params5 = {
+        layer: sredper13,
+        basemap: map.basemap,  // "gray"
+        field: "SRedPer",
+		title: "Sediment Reduction Percentage",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color13Params5)
+       .then(function(response){
+        sredper13.renderer = response.renderer;
+     }); 
+	   //5
+    var predper13 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/12",
+	    visible: false,
+		title: "Phosphorus Reduction Percentage",
+	    popupTemplate: popupTemplate0
+        });  
+      // visualization based on field and normalization field
+    var color13Params6 = {
+        layer: predper13,
+        basemap: map.basemap,  // "gray"
+        field: "PRedPer",
+		title: "Phosphorus Reduction Percentage",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color13Params6)
+       .then(function(response){
+        predper13.renderer = response.renderer;
+     }); 
+	   //6
+    var nredper13 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/12",
+	    visible: false,
+		title: "Nitrogen Reduction Percentage",
+	    popupTemplate: popupTemplate0
+        });  
+      // visualization based on field and normalization field
+    var color13Params6 = {
+        layer: nredper13,
+        basemap: map.basemap,  // "gray"
+        field: "NRedPer",
+		title: "Nitrogen Reduction Percentage",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color13Params6)
+       .then(function(response){
+        nredper13.renderer = response.renderer;
+     });	 
+	
+	var smine = new GroupLayer({
+        title: "Surface Mine",
+        visible: true,
+        layers: [sredper13, sredgoal13, predper13, predgoal13, nredper13, nredgoal13],
+      });
+	  
+	//Unmanaged Grass
+	//1
+    var predgoal14 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/13",
+	    visible: false,
+		title: "Phosphorus Reduction Goal",
+	    popupTemplate: popupTemplate0
+        });
+   
+      // visualization based on field and normalization field
+      var color14Params1 = {
+        layer: predgoal14,
+        basemap: map.basemap,  // "gray"
+        field: "PRedGoal",
+		title: "Phosphorus Reduction Goal",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color14Params1)
+       .then(function(response){
+        predgoal14.renderer = response.renderer;
+     });
+    //2 
+    var nredgoal14 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/13",
+	    visible: false,
+		title: "Nitrogen Reduction Goal",
+	    popupTemplate: popupTemplate0
+        });
+   
+      // visualization based on field and normalization field
+      var color14Params2 = {
+        layer: nredgoal14,
+        basemap: map.basemap,  // "gray"
+        field: "NRedGoal",
+		title: "Nitrogen Reduction Goal",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color14Params3)
+       .then(function(response){
+        nredgoal14.renderer = response.renderer;
+     });
+	 
+	    //3 
+    var sredgoal14 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/13",
+	    visible: false,
+		title: "Sediment Reduction Goal",
+	    popupTemplate: popupTemplate0
+        });
+   
+      // visualization based on field and normalization field
+      var color14Params3 = {
+        layer: sredgoal14,
+        basemap: map.basemap,  // "gray"
+        field: "SRedGoal",
+		title: "Sediment Reduction Goal",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color14Params3)
+       .then(function(response){
+        sredgoal14.renderer = response.renderer;
+     }); 
+	 
+	    //4
+    var sredper14 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/13",
+	    visible: false,
+		title: "Sediment Reduction Percentage",
+	    popupTemplate: popupTemplate0
+        });  
+      // visualization based on field and normalization field
+      var color14Params5 = {
+        layer: sredper14,
+        basemap: map.basemap,  // "gray"
+        field: "SRedPer",
+		title: "Sediment Reduction Percentage",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color14Params5)
+       .then(function(response){
+        sredper14.renderer = response.renderer;
+     }); 
+	   //5
+    var predper14 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/13",
+	    visible: false,
+		title: "Phosphorus Reduction Percentage",
+	    popupTemplate: popupTemplate0
+        });  
+      // visualization based on field and normalization field
+    var color14Params6 = {
+        layer: predper14,
+        basemap: map.basemap,  // "gray"
+        field: "PRedPer",
+		title: "Phosphorus Reduction Percentage",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color14Params6)
+       .then(function(response){
+        predper14.renderer = response.renderer;
+     }); 
+	   //6
+    var nredper14 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/13",
+	    visible: false,
+		title: "Nitrogen Reduction Percentage",
+	    popupTemplate: popupTemplate0
+        });  
+      // visualization based on field and normalization field
+    var color14Params6 = {
+        layer: nredper14,
+        basemap: map.basemap,  // "gray"
+        field: "NRedPer",
+		title: "Nitrogen Reduction Percentage",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color14Params6)
+       .then(function(response){
+        nredper14.renderer = response.renderer;
+     });	 
+	
+	var ugrass = new GroupLayer({
+        title: "Unmanaged Grass",
+        visible: true,
+        layers: [sredper14, sredgoal14, predper14, predgoal14, nredper14, nredgoal14],
+      });
+	  
+	//Unmanaged Urban Impervious
+	//1
+    var predgoal15 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/14",
+	    visible: false,
+		title: "Phosphorus Reduction Goal",
+	    popupTemplate: popupTemplate0
+        });
+   
+      // visualization based on field and normalization field
+      var color15Params1 = {
+        layer: predgoal15,
+        basemap: map.basemap,  // "gray"
+        field: "PRedGoal",
+		title: "Phosphorus Reduction Goal",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color15Params1)
+       .then(function(response){
+        predgoal15.renderer = response.renderer;
+     });
+    //2 
+    var nredgoal15 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/14",
+	    visible: false,
+		title: "Nitrogen Reduction Goal",
+	    popupTemplate: popupTemplate0
+        });
+   
+      // visualization based on field and normalization field
+      var color15Params2 = {
+        layer: nredgoal15,
+        basemap: map.basemap,  // "gray"
+        field: "NRedGoal",
+		title: "Nitrogen Reduction Goal",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color15Params3)
+       .then(function(response){
+        nredgoal15.renderer = response.renderer;
+     });
+	 
+	    //3 
+    var sredgoal15 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/14",
+	    visible: false,
+		title: "Sediment Reduction Goal",
+	    popupTemplate: popupTemplate0
+        });
+   
+      // visualization based on field and normalization field
+      var color15Params3 = {
+        layer: sredgoal15,
+        basemap: map.basemap,  // "gray"
+        field: "SRedGoal",
+		title: "Sediment Reduction Goal",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color15Params3)
+       .then(function(response){
+        sredgoal15.renderer = response.renderer;
+     }); 
+	 
+	    //4
+    var sredper15 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/14",
+	    visible: false,
+		title: "Sediment Reduction Percentage",
+	    popupTemplate: popupTemplate0
+        });  
+      // visualization based on field and normalization field
+      var color15Params5 = {
+        layer: sredper15,
+        basemap: map.basemap,  // "gray"
+        field: "SRedPer",
+		title: "Sediment Reduction Percentage",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color15Params5)
+       .then(function(response){
+        sredper15.renderer = response.renderer;
+     }); 
+	   //5
+    var predper15 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/14",
+	    visible: false,
+		title: "Phosphorus Reduction Percentage",
+	    popupTemplate: popupTemplate0
+        });  
+      // visualization based on field and normalization field
+    var color15Params6 = {
+        layer: predper15,
+        basemap: map.basemap,  // "gray"
+        field: "PRedPer",
+		title: "Phosphorus Reduction Percentage",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color15Params6)
+       .then(function(response){
+        predper15.renderer = response.renderer;
+     }); 
+	   //6
+    var nredper15 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/14",
+	    visible: false,
+		title: "Nitrogen Reduction Percentage",
+	    popupTemplate: popupTemplate0
+        });  
+      // visualization based on field and normalization field
+    var color15Params6 = {
+        layer: nredper15,
+        basemap: map.basemap,  // "gray"
+        field: "NRedPer",
+		title: "Nitrogen Reduction Percentage",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color15Params6)
+       .then(function(response){
+        nredper15.renderer = response.renderer;
+     });	 
+	var uui = new GroupLayer({
+        title: "Unregulated Urban Impervious",
+        visible: true,
+        layers: [sredper15, sredgoal15, predper15, predgoal15, nredper15, nredgoal15],
+      });	  
+	//Unregulated Urban Pervious
+    //1
+    var predgoal16 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/15",
+	    visible: false,
+		title: "Phosphorus Reduction Goal",
+	    popupTemplate: popupTemplate0
+        });  
+      // visualization based on field and normalization field
+      var color16Params1 = {
+        layer: predgoal16,
+        basemap: map.basemap,  // "gray"
+        field: "PRedGoal",
+		title: "Phosphorus Reduction Goal",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color16Params1)
+       .then(function(response){
+        predgoal16.renderer = response.renderer;
+     });
+    //2 
+    var nredgoal16 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/15",
+	    visible: false,
+		title: "Nitrogen Reduction Goal",
+	    popupTemplate: popupTemplate0
+        });   
+      // visualization based on field and normalization field
+      var color16Params2 = {
+        layer: nredgoal16,
+        basemap: map.basemap,  // "gray"
+        field: "NRedGoal",
+		title: "Nitrogen Reduction Goal",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color16Params3)
+       .then(function(response){
+        nredgoal16.renderer = response.renderer;
+     });	 
+	    //3 
+    var sredgoal16 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/15",
+	    visible: false,
+		title: "Sediment Reduction Goal",
+	    popupTemplate: popupTemplate0
+        });
+      // visualization based on field and normalization field
+      var color16Params3 = {
+        layer: sredgoal16,
+        basemap: map.basemap,  // "gray"
+        field: "SRedGoal",
+		title: "Sediment Reduction Goal",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color16Params3)
+       .then(function(response){
+        sredgoal16.renderer = response.renderer;
+     }); 	 
+	    //4
+    var sredper16 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/15",
+	    visible: false,
+		title: "Sediment Reduction Percentage",
+	    popupTemplate: popupTemplate0
+        });  
+      // visualization based on field and normalization field
+      var color16Params5 = {
+        layer: sredper16,
+        basemap: map.basemap,  // "gray"
+        field: "SRedPer",
+		title: "Sediment Reduction Percentage",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color16Params5)
+       .then(function(response){
+        sredper16.renderer = response.renderer;
+     }); 
+	   //5
+    var predper16 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/15",
+	    visible: false,
+		title: "Phosphorus Reduction Percentage",
+	    popupTemplate: popupTemplate0
+        });  
+      // visualization based on field and normalization field
+    var color16Params6 = {
+        layer: predper16,
+        basemap: map.basemap,  // "gray"
+        field: "PRedPer",
+		title: "Phosphorus Reduction Percentage",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color16Params6)
+       .then(function(response){
+        predper16.renderer = response.renderer;
+     }); 
+	   //6
+    var nredper16 = new FeatureLayer ({
+        url: "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer/15",
+	    visible: false,
+		title: "Nitrogen Reduction Percentage",
+	    popupTemplate: popupTemplate0
+        });  
+      // visualization based on field and normalization field
+    var color16Params6 = {
+        layer: nredper16,
+        basemap: map.basemap,  // "gray"
+        field: "NRedPer",
+		title: "Nitrogen Reduction Percentage",
+        classificationMethod: "natural-breaks",
+      };
+      // when the promise resolves, apply the renderer to the layer
+    colorRendererCreator.createClassBreaksRenderer(color16Params6)
+       .then(function(response){
+        nredper16.renderer = response.renderer;
+     });	 	
+	var uup = new GroupLayer({
+        title: "Unregulated Urban Pervious",
+        visible: true,
+        layers: [sredper16, sredgoal16, predper16, predgoal16, nredper16, nredgoal16],
+      });
+	//************************************************************************************************************************************
+	//********************* END OF ANIMAL OPERATIONS LAYER CODE***************************************************************************		  
+	// GROUP SUBLAYERS INTO ONE LAYER
+    var countyops = new GroupLayer({
+        title: "County Loading & Reduction Rates by Subsource",
+        visible: true,
+        layers: [uup, uui, ugrass, smine, septic, rup, rui, rao, pasture, nurseries, hay, forest, crop, cons, css, animalops],
+      });			
+	   map.add(countyops);	   
+		//Create variables and all sublayers that will be added to map
+		//Sublayers created to enable specific popup info for each sublayer
+        var datasets = new MapImageLayer({
+          url : "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationDatasetsDRAFT/MapServer",
+          useMapImage: true,
+		  sublayers: 
+		[
+	      {
+          id: 0,
+		  visible: false,
+	      title: "Parcel Layer",
+          },
+		  {
+          id: 1,
+		  visible: false,
+	      title: "Restoration Opportunity Areas",
+          },
+		],
+		title: "Prioritization Data Layers for Lower and Middle James Regions"
+        });
+        map.add(datasets);
+ 		//Add Boundary Layer
+		var bounds = new MapImageLayer({
+          url : "https://cicgis.org/arcgis/rest/services/James/JamesRiverPrioritizationWebMap/MapServer",
+          useMapImage: true,
+		  sublayers: 
+		[
+		 {
+          id: 19,
+		  visible: false,
+	      title: "Dominion APE",         
+          },
+	      {
+          id: 18,
+		  visible: false,
+	      title: "Conservation Lands",
+          popupTemplate: popupTemplate18
+          },
+		  {
+          id: 21,
+		  visible: false,
+	      title: "Middle and Lower James HUC 10 Watersheds",
+          popupTemplate: popupTemplate21
+          },				
+	      {
+          id: 22,
+		  visible: false,
+	      title: "Counties in James River Watershed",
+          popupTemplate: popupTemplate22
+          },
+	      {
+          id: 20,
+		  visible: true,
+	      title: "Watershed Region Boundaries",
+          popupTemplate: popupTemplate20
+          }
+	    ],            
+		  title: "Boundary Layers"
+        });
+        map.add(bounds);	
+		//Create legend widget and add desired layers to be displayed in legend
+        var legend = new Legend({
+          view: view,
+          layerInfos: [{
+           layer: bounds, 
+            title: "Boundaries"
+          },
+		  {
+		  layer: ecological,
+		  },
+		  {
+          layer: landcover,
+		  },
+		  {
+          layer: countyops,
+		  },
+		  {
+          layer: datasets,
+		  }]
+        });		
+        //Add  widget to the bottom left of the view
+        view.ui.add(legend, "bottom-left");
+        //Create Basemap toggle option that switches between satellite and topographic imagery
+        var basemapToggle = new BasemapToggle({
+          view: view,  // The view that provides access to the map's "topo" basemap
+          nextBasemap: "satellite"  // Allows for toggling to the "hybrid" basemap
+        });		
+      //Create search widget 
+      var searchWidget = new Search({
+        view: view
+      });
+      // Add the search widget to the top right corner of the view
+      view.ui.add(searchWidget, {
+        position: "top-right"
+      });	  
+		//Create Home Button
+        var homeBtn = new Home({
+          view: view
+        });
+        // Add the home button to the top left corner of the view
+        view.ui.add(homeBtn, "top-left");
+        // Add the Basemap Gallery to the bottom right corner of the view 
+        view.ui.add(basemapToggle, "bottom-right");
+	   //Add scalebar
+      var scaleBar = new ScaleBar({
+        view: view,
+        style: "ruler",
+        unit: "dual" // The scale bar displays both metric and non-metric units.
+      });
+      // Add the widget to the bottom left corner of the view
+      view.ui.add(scaleBar, {
+        position: "bottom-right"
+      });		
+        //Create function for displaying layerlist when layers are added to the map view
+        view.when(function () {
+          var layerList = new LayerList({
+            view: view
+          });
+          // Add widget to the top right corner of the view
+          view.ui.add(layerList, "top-right");
+        });
+      });
+  </script>
+</head>
+<body>
+  <div class="loader"></div>
+  <div class="wrapper">
+    <header>
+      <img src="https://chesapeakeconservancy.org/wp-content/themes/chesapeakeconservancy/images/logo.png" />
+      <h1>Virginia Environmental Endowment WebViewer</h1>
+    </header>
+    <div class="body">
+      <div id="viewDiv"></div>
+    </div>
+  <div class="alert">
+  <button class="closebtn" onclick="this.parentElement.style.display='none';"> &times; </button> 
+  Tip &#128161; : To view prioritization data layers, use the search bar to navigate to your region of interest or zoom to a scale of at least 1: 600 m and switch to satellite imagery.
+  </div>
+  </div>
+</body>
+
+</html>
